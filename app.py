@@ -409,6 +409,28 @@ def init_db():
                 created += 1
     return f"Ran {created} statements. Remove this route now."
 
+@app.route("/health/env")
+def health_env():
+    import os, pathlib
+    root = pathlib.Path(__file__).resolve().parent
+    return {
+        "has_DATABASE_URL": bool(os.getenv("DATABASE_URL")),
+        "DATABASE_URL_prefix": (os.getenv("DATABASE_URL") or "")[:20],
+        "cwd": str(root),
+        "schema_exists": (root / "schema.sql").exists()
+    }
+
+@app.route("/health/db")
+def health_db():
+    from db import get_conn
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 AS ok;")
+                row = cur.fetchone()
+        return {"db_ok": True, "row": row}
+    except Exception as e:
+        return {"db_ok": False, "error": str(e)}, 500
 
 if __name__ == "__main__":
     app.run(debug=True)
