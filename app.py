@@ -1,6 +1,8 @@
 # app.py
 from flask import Flask, render_template, request, redirect, url_for, flash
 from datetime import datetime
+from threading import Lock
+
 from db import get_conn, ensure_schema
 
 app = Flask(__name__)
@@ -11,15 +13,23 @@ app.secret_key = "dev-secret-change-me"  # set SECRET_KEY in prod
 def health():
     return "OK", 200
 
-# -------- Init schema once per worker (idempotent) --------
-@app.before_first_request
-def _bootstrap_schema():
-    try:
-        with get_conn() as conn:
-            ensure_schema(conn)
-    except Exception:
-        # Don't crash startup if schema creation fails; routes may still work with MySQL
-        pass
+# -------- Ensure schema once per worker (Flask 3.x safe) --------
+_schema_ready = False
+_schema_lock = Lock()
+
+@app.before_request
+def _ensure_schema_once():
+    global _schema_ready
+    if not _schema_ready:
+        with _schema_lock:
+            if not _schema_ready:
+                try:
+                    with get_conn() as conn:
+                        ensure_schema(conn)
+                    _schema_ready = True
+                except Exception:
+                    # Don't block requests if schema init fails; real errors will surface in routes
+                    pass
 
 # ---------- Home (Dashboard) ----------
 @app.route("/")
