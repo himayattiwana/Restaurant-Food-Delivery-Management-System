@@ -1,4 +1,3 @@
-# db.py
 import os
 import pymysql
 from urllib.parse import urlparse
@@ -7,7 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Prefer DATABASE_URL if present (Railway)
 db_url = os.getenv("DATABASE_URL")
 
 if db_url:
