@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from datetime import datetime
 from threading import Lock
+import sqlite3
 
 from db import get_conn, ensure_schema
 
@@ -45,6 +46,30 @@ def _parse_date(value, fmt="%Y-%m-%d"):
         return datetime.strptime(value, fmt)
     except Exception:
         return None
+
+def _commit(conn):
+    """Force-commit for both MySQL and SQLite (no-op if autocommit)."""
+    try:
+        conn.commit()
+    except Exception:
+        pass
+
+def _lazy_create_coupon(conn):
+    """If COUPON table is missing (SQLite partial init), create it quickly."""
+    ddl = """
+    CREATE TABLE IF NOT EXISTS COUPON (
+      Coupon_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+      Code TEXT UNIQUE NOT NULL,
+      Discount NUMERIC NOT NULL,
+      Expiry_Date TEXT
+    );
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(ddl)
+    except Exception:
+        # Ignore; main schema creation already tries this too
+        pass
 
 # ---------- Home (Dashboard) ----------
 @app.route("/")
@@ -111,6 +136,7 @@ def add_restaurant():
                 "INSERT INTO RESTAURANT (Name, Address, Phone, Opening_Hours) VALUES (%s, %s, %s, %s)",
                 (name, address, phone, opening_hours),
             )
+        _commit(conn)
     flash("Restaurant added", "success")
     return redirect(url_for("restaurants"))
 
@@ -119,6 +145,7 @@ def delete_restaurant(restaurant_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM RESTAURANT WHERE Restaurant_ID = %s", (restaurant_id,))
+        _commit(conn)
     flash("Restaurant deleted", "success")
     return redirect(url_for("restaurants"))
 
@@ -153,6 +180,7 @@ def add_customer():
                 "INSERT INTO CUSTOMER (Name, Email, Phone, Address) VALUES (%s, %s, %s, %s)",
                 (name, email, phone, address),
             )
+        _commit(conn)
     flash("Customer added", "success")
     return redirect(url_for("customers"))
 
@@ -161,6 +189,7 @@ def delete_customer(customer_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM CUSTOMER WHERE Customer_ID = %s", (customer_id,))
+        _commit(conn)
     flash("Customer deleted", "success")
     return redirect(url_for("customers"))
 
@@ -199,6 +228,7 @@ def add_food_item():
                 "INSERT INTO FOOD_ITEM (Name, Price, Restaurant_ID) VALUES (%s, %s, %s)",
                 (name, price, restaurant_id),
             )
+        _commit(conn)
     flash("Food item added", "success")
     return redirect(url_for("food_items"))
 
@@ -207,6 +237,7 @@ def delete_food_item(item_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM FOOD_ITEM WHERE Item_ID = %s", (item_id,))
+        _commit(conn)
     flash("Food item deleted", "success")
     return redirect(url_for("food_items"))
 
@@ -249,6 +280,7 @@ def add_order():
                 INSERT INTO ORDERS (Customer_ID, Restaurant_ID, Order_Date, Total_Amount, Agent_ID)
                 VALUES (%s, %s, %s, %s, %s)
             """, (customer_id, restaurant_id, order_date, total_amount, agent_id))
+        _commit(conn)
     flash("Order added", "success")
     return redirect(url_for("orders"))
 
@@ -257,6 +289,7 @@ def delete_order(order_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM ORDERS WHERE Order_ID = %s", (order_id,))
+        _commit(conn)
     flash("Order deleted", "success")
     return redirect(url_for("orders"))
 
@@ -290,6 +323,7 @@ def add_order_detail(order_id):
                 INSERT INTO ORDER_DETAIL (Order_ID, Item_ID, Quantity)
                 VALUES (%s, %s, %s)
             """, (order_id, item_id, quantity))
+        _commit(conn)
     flash("Item added to order", "success")
     return redirect(url_for("order_details", order_id=order_id))
 
@@ -298,6 +332,7 @@ def delete_order_detail(order_id, item_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM ORDER_DETAIL WHERE Order_ID = %s AND Item_ID = %s", (order_id, item_id))
+        _commit(conn)
     flash("Item removed from order", "success")
     return redirect(url_for("order_details", order_id=order_id))
 
@@ -327,6 +362,7 @@ def add_delivery_agent():
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("INSERT INTO DELIVERY_AGENT (Name, Phone) VALUES (%s, %s)", (name, phone))
+        _commit(conn)
     flash("Delivery agent added", "success")
     return redirect(url_for("delivery_agents"))
 
@@ -335,6 +371,7 @@ def delete_delivery_agent(agent_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM DELIVERY_AGENT WHERE Agent_ID = %s", (agent_id,))
+        _commit(conn)
     flash("Delivery agent deleted", "success")
     return redirect(url_for("delivery_agents"))
 
@@ -375,6 +412,7 @@ def add_delivery():
                 INSERT INTO DELIVERY (Order_ID, Agent_ID, Delivery_Date, Status)
                 VALUES (%s, %s, %s, %s)
             """, (order_id, agent_id, delivery_date, status))
+        _commit(conn)
     flash("Delivery recorded", "success")
     return redirect(url_for("deliveries"))
 
@@ -383,6 +421,7 @@ def delete_delivery(delivery_id):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM DELIVERY WHERE Delivery_ID = %s", (delivery_id,))
+        _commit(conn)
     flash("Delivery deleted", "success")
     return redirect(url_for("deliveries"))
 
@@ -391,7 +430,12 @@ def delete_delivery(delivery_id):
 def coupons():
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM COUPON ORDER BY Code")
+            try:
+                cur.execute("SELECT * FROM COUPON ORDER BY Code")
+            except Exception:
+                # If schema init was partial, create COUPON lazily and retry
+                _lazy_create_coupon(conn)
+                cur.execute("SELECT * FROM COUPON ORDER BY Code")
             rows = cur.fetchall()
     return render_template("coupons.html", rows=rows)
 
@@ -412,8 +456,18 @@ def add_coupon():
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO COUPON (Code, Discount, Expiry_Date) VALUES (%s, %s, %s)",
-                        (code, discount, expiry_date))
+            try:
+                cur.execute("INSERT INTO COUPON (Code, Discount, Expiry_Date) VALUES (%s, %s, %s)",
+                            (code, discount, expiry_date))
+            except Exception as e:
+                # If the table was missing, create and retry once
+                if isinstance(e, sqlite3.OperationalError) and "no such table" in str(e).lower():
+                    _lazy_create_coupon(conn)
+                    cur.execute("INSERT INTO COUPON (Code, Discount, Expiry_Date) VALUES (%s, %s, %s)",
+                                (code, discount, expiry_date))
+                else:
+                    raise
+        _commit(conn)
     flash("Coupon added", "success")
     return redirect(url_for("coupons"))
 

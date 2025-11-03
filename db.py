@@ -5,7 +5,7 @@ import pymysql
 import urllib.parse as up
 
 # --- Config ---
-MYSQL_URL = os.getenv("MYSQL_URL")                   # e.g. mysql://user:pass@127.0.0.1:3306/restaurant
+MYSQL_URL = os.getenv("MYSQL_URL")  # e.g. mysql://user:pass@127.0.0.1:3306/restaurant
 SQLITE_PATH = os.getenv("SQLITE_PATH", "/tmp/demo.db")  # writable on Render
 
 # =========================
@@ -14,6 +14,7 @@ SQLITE_PATH = os.getenv("SQLITE_PATH", "/tmp/demo.db")  # writable on Render
 def get_conn():
     """
     MySQL if MYSQL_URL is set, else SQLite.
+    SQLite is opened in AUTOCOMMIT mode so inserts/updates are visible immediately.
     For SQLite, returns a proxy that:
       - supports `with conn.cursor() as cur:`
       - converts %s -> ? so your existing queries work unchanged
@@ -27,10 +28,11 @@ def get_conn():
             port=u.port or 3306,
             database=(u.path or "/").lstrip("/"),
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True,
+            autocommit=True,  # MySQL autocommit
         )
 
-    conn = sqlite3.connect(SQLITE_PATH, check_same_thread=False)
+    # SQLite: autocommit ON (isolation_level=None)
+    conn = sqlite3.connect(SQLITE_PATH, check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return _SQLiteConnProxy(conn)
@@ -99,9 +101,11 @@ class _SQLiteConnProxy:
 
     # context manager passthrough
     def __enter__(self):
-        self._conn.__enter__(); return self
+        # In autocommit mode this is a no-op, but keep API parity
+        return self
     def __exit__(self, exc_type, exc, tb):
-        return self._conn.__exit__(exc_type, exc, tb)
+        # No implicit commit needed (autocommit). Close handled by platform.
+        return False
 
     # attributes passthrough
     def __getattr__(self, name):
@@ -110,6 +114,10 @@ class _SQLiteConnProxy:
     # cursor that understands %s + returns dict rows
     def cursor(self):
         return _SQLiteCompatCursor(self._conn.cursor())
+
+    def commit(self):
+        try: self._conn.commit()
+        except Exception: pass
 
     def close(self):
         try: self._conn.close()
@@ -221,6 +229,12 @@ def _ensure_schema_mysql(conn):
         REFERENCES ORDERS(Order_ID)
         ON UPDATE CASCADE ON DELETE SET NULL
     );
+    CREATE TABLE IF NOT EXISTS COUPON (
+      Coupon_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Code VARCHAR(50) UNIQUE NOT NULL,
+      Discount DECIMAL(10,2) NOT NULL,
+      Expiry_Date DATE
+    );
     CREATE TABLE IF NOT EXISTS RIDER_LOCATION (
       Agent_ID INT PRIMARY KEY,
       Latitude DECIMAL(9,6),
@@ -319,6 +333,12 @@ def _ensure_schema_sqlite(conn):
       Payment_Date TEXT,
       FOREIGN KEY (Order_ID) REFERENCES ORDERS(Order_ID)
         ON UPDATE CASCADE ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS COUPON (
+      Coupon_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+      Code TEXT UNIQUE NOT NULL,
+      Discount NUMERIC NOT NULL,
+      Expiry_Date TEXT
     );
     CREATE TABLE IF NOT EXISTS RIDER_LOCATION (
       Agent_ID INTEGER PRIMARY KEY,
