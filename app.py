@@ -386,6 +386,29 @@ def health_db():
     except Exception as e:
         return {"ok": False, "error": str(e)}, 500
 
+@app.route("/admin/init-db")
+def init_db():
+    from db import get_conn
+    import os
+
+    path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    if not os.path.exists(path):
+        return "schema.sql not found", 404
+
+    with open(path, "r", encoding="utf-8") as f:
+        sql = f.read()
+
+    stmts = [s.strip() for s in sql.split(";") if s.strip()]
+    created = 0
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT DATABASE();")
+            # ensure we're on the right DB; Railway’s DATABASE_URL selects it
+            for s in stmts:
+                cur.execute(s)
+                created += 1
+    return f"Ran {created} statements. Remove this route now."
+
 
 if __name__ == "__main__":
     app.run(debug=True)
