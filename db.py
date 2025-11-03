@@ -352,3 +352,118 @@ def _ensure_schema_sqlite(conn):
     with conn.cursor() as cur:
         for stmt in [s.strip() for s in ddl.split(";") if s.strip()]:
             cur.execute(stmt)
+
+# =========================
+# Sample Data Insertion
+# =========================
+def insert_sample_data(conn):
+    """Insert sample data if tables are empty. Safe to run multiple times."""
+    try:
+        with conn.cursor() as cur:
+            # Check if we already have data
+            cur.execute("SELECT COUNT(*) as c FROM RESTAURANT")
+            row = cur.fetchone()
+            count = row["c"] if isinstance(row, dict) else row[0]
+            
+            if count > 0:
+                # Data already exists, skip insertion
+                return
+            
+            print("Inserting sample data...")
+            
+            # Insert Restaurants
+            restaurants = [
+                ("Pizza Palace", "123 Main St, New York", "555-0100", "11:00-23:00"),
+                ("Burger House", "456 Oak Ave, Los Angeles", "555-0101", "10:00-22:00"),
+                ("Sushi World", "789 Pine Rd, San Francisco", "555-0102", "12:00-21:00"),
+                ("Taco Town", "321 Elm St, Chicago", "555-0103", "11:00-23:00"),
+                ("Pasta Paradise", "654 Maple Dr, Miami", "555-0104", "12:00-22:00"),
+            ]
+            cur.executemany(
+                "INSERT INTO RESTAURANT (Name, Address, Phone, Opening_Hours) VALUES (%s, %s, %s, %s)",
+                restaurants
+            )
+            
+            # Insert Customers
+            customers = [
+                ("John Doe", "john@example.com", "555-1001", "10 Park Ave, New York"),
+                ("Jane Smith", "jane@example.com", "555-1002", "20 Broadway, Los Angeles"),
+                ("Bob Johnson", "bob@example.com", "555-1003", "30 Market St, San Francisco"),
+                ("Alice Williams", "alice@example.com", "555-1004", "40 State St, Chicago"),
+                ("Charlie Brown", "charlie@example.com", "555-1005", "50 Ocean Dr, Miami"),
+                ("Diana Prince", "diana@example.com", "555-1006", "60 Hill St, New York"),
+                ("Eve Adams", "eve@example.com", "555-1007", "70 Valley Rd, Los Angeles"),
+                ("Frank Castle", "frank@example.com", "555-1008", "80 River Ln, San Francisco"),
+            ]
+            cur.executemany(
+                "INSERT INTO CUSTOMER (Name, Email, Phone, Address) VALUES (%s, %s, %s, %s)",
+                customers
+            )
+            
+            # Insert Delivery Agents
+            agents = [
+                ("Mike Driver", "555-2001"),
+                ("Sarah Rider", "555-2002"),
+                ("Tom Wheeler", "555-2003"),
+                ("Lisa Fast", "555-2004"),
+                ("Jack Quick", "555-2005"),
+            ]
+            cur.executemany(
+                "INSERT INTO DELIVERY_AGENT (Name, Phone) VALUES (%s, %s)",
+                agents
+            )
+            
+            # Insert Food Items
+            food_items = [
+                ("Margherita Pizza", 12.99, 1),
+                ("Pepperoni Pizza", 14.99, 1),
+                ("Veggie Pizza", 13.99, 1),
+                ("Cheeseburger", 9.99, 2),
+                ("Bacon Burger", 11.99, 2),
+                ("Veggie Burger", 10.99, 2),
+                ("California Roll", 8.99, 3),
+                ("Salmon Nigiri", 12.99, 3),
+                ("Tuna Sashimi", 15.99, 3),
+                ("Beef Tacos", 7.99, 4),
+                ("Chicken Tacos", 6.99, 4),
+                ("Fish Tacos", 8.99, 4),
+                ("Spaghetti Carbonara", 13.99, 5),
+                ("Fettuccine Alfredo", 14.99, 5),
+                ("Penne Arrabbiata", 12.99, 5),
+            ]
+            cur.executemany(
+                "INSERT INTO FOOD_ITEM (Name, Price, Restaurant_ID) VALUES (%s, %s, %s)",
+                food_items
+            )
+            
+            # Insert Sample Orders
+            orders = [
+                (1, 1, "2024-11-01 12:00:00", 25.98, 1),
+                (2, 2, "2024-11-01 13:30:00", 21.98, 2),
+                (3, 3, "2024-11-02 19:00:00", 24.98, 3),
+                (4, 4, "2024-11-02 20:15:00", 14.98, 4),
+                (5, 5, "2024-11-03 12:45:00", 28.98, 5),
+            ]
+            cur.executemany(
+                "INSERT INTO ORDERS (Customer_ID, Restaurant_ID, Order_Date, Total_Amount, Agent_ID) VALUES (%s, %s, %s, %s, %s)",
+                orders
+            )
+            
+            # Insert Coupons
+            coupons = [
+                ("SAVE10", 10.00, "2025-12-31"),
+                ("SAVE20", 20.00, "2025-12-31"),
+                ("FREESHIP", 5.00, "2025-11-30"),
+                ("NEWYEAR25", 25.00, "2025-01-31"),
+            ]
+            cur.executemany(
+                "INSERT INTO COUPON (Code, Discount, Expiry_Date) VALUES (%s, %s, %s)",
+                coupons
+            )
+            
+            conn.commit()
+            print("Sample data inserted successfully!")
+            
+    except Exception as e:
+        print(f"Error inserting sample data: {e}")
+        # Don't raise - app should continue even if sample data fails
