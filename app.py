@@ -4,6 +4,12 @@ from datetime import datetime
 from db import get_conn
 
 app = Flask(__name__)
+
+
+# Health check route for Render
+@app.route("/health")
+def health():
+    return "OK", 200
 app.secret_key = "dev-secret-change-me"  # change in production
 
 # ---------- Home (Dashboard) ----------
