@@ -4,15 +4,19 @@ import sqlite3
 import pymysql
 import urllib.parse as up
 
-MYSQL_URL = os.getenv("MYSQL_URL")  # e.g. mysql://user:pass@127.0.0.1:3306/restaurant
+# --- Config ---
+MYSQL_URL = os.getenv("MYSQL_URL")                   # e.g. mysql://user:pass@127.0.0.1:3306/restaurant
 SQLITE_PATH = os.getenv("SQLITE_PATH", "/tmp/demo.db")  # writable on Render
 
-# ------------------------- Connection factory -------------------------
-
+# =========================
+# Connection factory
+# =========================
 def get_conn():
     """
-    Returns a connection to MySQL if MYSQL_URL is set; otherwise a SQLite connection
-    (wrapped in a proxy so context managers & %s placeholders still work).
+    MySQL if MYSQL_URL is set, else SQLite.
+    For SQLite, returns a proxy that:
+      - supports `with conn.cursor() as cur:`
+      - converts %s -> ? so your existing queries work unchanged
     """
     if MYSQL_URL:
         u = up.urlparse(MYSQL_URL)
@@ -21,24 +25,24 @@ def get_conn():
             user=u.username,
             password=u.password,
             port=u.port or 3306,
-            database=u.path.lstrip("/"),
+            database=(u.path or "/").lstrip("/"),
             cursorclass=pymysql.cursors.DictCursor,
             autocommit=True,
         )
 
-    # SQLite fallback
     conn = sqlite3.connect(SQLITE_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return _SQLiteConnProxy(conn)
 
 def is_sqlite_conn(conn) -> bool:
-    """True if the connection is our SQLite proxy."""
     return isinstance(conn, _SQLiteConnProxy)
 
-# ------------------------- Cursor compatibility -------------------------
-
+# =========================
+# SQLite compatibility layer
+# =========================
 def _convert_percent_s_to_qmark(query: str) -> str:
+    # naive but effective for typical CRUD
     return query.replace("%s", "?")
 
 def _row_to_dict(row):
@@ -49,16 +53,15 @@ def _row_to_dict(row):
     return row
 
 class _SQLiteCompatCursor:
-    """Wrapper so you can keep using MySQL-style `%s` placeholders and context managers."""
+    """Context-manager cursor that accepts %s placeholders, returns dict-like rows."""
     def __init__(self, inner):
         self._cur = inner
-    def __enter__(self):
-        return self
+
+    def __enter__(self): return self
     def __exit__(self, exc_type, exc, tb):
-        try:
-            self._cur.close()
-        except Exception:
-            pass
+        try: self._cur.close()
+        except Exception: pass
+
     def execute(self, query, params=None):
         q = _convert_percent_s_to_qmark(query)
         if params is None:
@@ -68,6 +71,7 @@ class _SQLiteCompatCursor:
         elif not isinstance(params, (list, tuple)):
             params = (params,)
         return self._cur.execute(q, params)
+
     def executemany(self, query, seq_of_params):
         q = _convert_percent_s_to_qmark(query)
         norm = []
@@ -78,53 +82,44 @@ class _SQLiteCompatCursor:
                 p = (p,)
             norm.append(p)
         return self._cur.executemany(q, norm)
-    def fetchone(self):
-        return _row_to_dict(self._cur.fetchone())
-    def fetchall(self):
-        return [_row_to_dict(r) for r in self._cur.fetchall()]
+
+    def fetchone(self): return _row_to_dict(self._cur.fetchone())
+    def fetchall(self): return [_row_to_dict(r) for r in self._cur.fetchall()]
     def fetchmany(self, size=None):
         rows = self._cur.fetchmany(size) if size else self._cur.fetchmany()
         return [_row_to_dict(r) for r in rows]
-    def close(self):
-        return self._cur.close()
+    def close(self): return self._cur.close()
     @property
-    def lastrowid(self):
-        return getattr(self._cur, "lastrowid", None)
+    def lastrowid(self): return getattr(self._cur, "lastrowid", None)
 
 class _SQLiteConnProxy:
-    """
-    Proxy around sqlite3.Connection so your code can keep doing:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                ...
-    """
+    """Proxy so you can keep using `with get_conn() as conn:` and `with conn.cursor() as cur:`."""
     def __init__(self, conn):
         self._conn = conn
+
     # context manager passthrough
     def __enter__(self):
-        self._conn.__enter__()
-        return self
+        self._conn.__enter__(); return self
     def __exit__(self, exc_type, exc, tb):
         return self._conn.__exit__(exc_type, exc, tb)
-    # attribute passthrough
+
+    # attributes passthrough
     def __getattr__(self, name):
         return getattr(self._conn, name)
-    # cursor wrapper
+
+    # cursor that understands %s + returns dict rows
     def cursor(self):
         return _SQLiteCompatCursor(self._conn.cursor())
+
     def close(self):
-        try:
-            self._conn.close()
-        except Exception:
-            pass
+        try: self._conn.close()
+        except Exception: pass
 
-# ------------------------- Schema bootstrap (idempotent) -------------------------
-
+# =========================
+# Schema bootstrap (idempotent)
+# =========================
 def ensure_schema(conn):
-    """
-    Create the full schema if it doesn't exist. Runs safely multiple times.
-    Uses MySQL-friendly DDL when on MySQL and SQLite-friendly DDL on SQLite.
-    """
+    """Create tables if missing. Safe to run multiple times."""
     if is_sqlite_conn(conn):
         _ensure_schema_sqlite(conn)
     else:
@@ -241,7 +236,6 @@ def _ensure_schema_mysql(conn):
             cur.execute(stmt)
 
 def _ensure_schema_sqlite(conn):
-    # SQLite types are looser; use INTEGER PRIMARY KEY AUTOINCREMENT and NUMERIC
     ddl = """
     CREATE TABLE IF NOT EXISTS RESTAURANT (
       Restaurant_ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -274,7 +268,7 @@ def _ensure_schema_sqlite(conn):
       Order_ID INTEGER PRIMARY KEY AUTOINCREMENT,
       Customer_ID INTEGER,
       Restaurant_ID INTEGER,
-      Order_Date TEXT NOT NULL,         -- store ISO string
+      Order_Date TEXT NOT NULL,
       Total_Amount NUMERIC NOT NULL,
       Agent_ID INTEGER,
       FOREIGN KEY (Customer_ID) REFERENCES CUSTOMER(Customer_ID)
