@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">Delivery Agents</h2>
+
+<form method="post" class="row g-2 mb-4">
+  <div class="col-md-3"><input class="form-control" name="name" placeholder="Name" required></div>
+  <div class="col-md-3"><input class="form-control" name="phone" placeholder="Phone"></div>
+  <div class="col-md-3"><input class="form-control" name="vehicle" placeholder="Vehicle No."></div>
+  <div class="col-md-2">
+    <select class="form-select" name="availability">
+      <option value="Y" selected>Available</option>
+      <option value="N">Unavailable</option>
+    </select>
+  </div>
+  <div class="col-md-1"><button class="btn btn-primary w-100">Add</button></div>
+</form>
+
+<table class="table table-striped">
+  <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Vehicle</th><th>Availability</th></tr></thead>
+  <tbody>
+    {% for a in agents %}
+      <tr>
+        <td>{{ a.Agent_ID }}</td>
+        <td>{{ a.Name }}</td>
+        <td>{{ a.Phone_Number or '-' }}</td>
+        <td>{{ a.Vehicle_Number or '-' }}</td>
+        <td>{{ a.Availability_Status }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

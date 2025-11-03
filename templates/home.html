@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-4">Dashboard</h2>
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card"><div class="card-body">
+    <div class="fw-bold">Restaurants</div><div class="display-6">{{ stats.restaurants }}</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body">
+    <div class="fw-bold">Customers</div><div class="display-6">{{ stats.customers }}</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body">
+    <div class="fw-bold">Food Items</div><div class="display-6">{{ stats.food_items }}</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body">
+    <div class="fw-bold">Orders</div><div class="display-6">{{ stats.orders }}</div>
+  </div></div></div>
+</div>
+
+<h4>Latest Orders</h4>
+<table class="table table-striped">
+  <thead><tr><th>#</th><th>Date</th><th>Customer</th><th>Restaurant</th><th>Status</th><th>Total</th></tr></thead>
+  <tbody>
+    {% for o in latest_orders %}
+    <tr>
+      <td><a href="{{ url_for('order_details', order_id=o.Order_ID) }}">#{{ o.Order_ID }}</a></td>
+      <td>{{ o.Order_Date }}</td>
+      <td>{{ o.customer or '-' }}</td>
+      <td>{{ o.restaurant or '-' }}</td>
+      <td>{{ o.Order_Status }}</td>
+      <td>₹{{ '%.2f'|format(o.Total_Amount or 0) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

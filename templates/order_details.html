@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">Order #{{ order.Order_ID }} — {{ order.restaurant or 'No Restaurant' }}</h2>
+
+<form method="post" class="row g-2 mb-4">
+  <div class="col-md-6">
+    <select class="form-select" name="food_id" required>
+      <option value="">Select Food Item</option>
+      {% for f in food %}
+        <option value="{{ f.Food_ID }}">{{ f.Name }} (₹{{ '%.2f'|format(f.Price or 0) }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <input class="form-control" type="number" name="quantity" min="1" value="1">
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-primary w-100">Add Item</button>
+  </div>
+</form>
+
+<table class="table table-striped">
+  <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead>
+  <tbody>
+    {% for d in details %}
+      <tr>
+        <td>{{ d.Order_Detail_ID }}</td>
+        <td>{{ d.item }}</td>
+        <td>{{ d.Quantity }}</td>
+        <td>₹{{ '%.2f'|format(d.Price or 0) }}</td>
+        <td>₹{{ '%.2f'|format((d.Price or 0) * d.Quantity) }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="alert alert-info"><strong>Total:</strong> ₹{{ '%.2f'|format(total or 0) }}</div>
+{% endblock %}

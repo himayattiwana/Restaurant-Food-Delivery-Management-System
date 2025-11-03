@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">Restaurants</h2>
+
+<form method="post" class="row g-2 mb-4">
+  <div class="col-md-3"><input class="form-control" name="name" placeholder="Name" required></div>
+  <div class="col-md-3"><input class="form-control" name="location" placeholder="Location"></div>
+  <div class="col-md-2"><input class="form-control" name="contact_number" placeholder="Contact"></div>
+  <div class="col-md-2"><input class="form-control" name="opening_hours" placeholder="Opening Hours"></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
+</form>
+
+<table class="table table-striped">
+  <thead><tr>
+    <th>ID</th><th>Name</th><th>Location</th><th>Contact</th><th>Hours</th><th>Rating</th>
+  </tr></thead>
+  <tbody>
+  {% for r in restaurants %}
+    <tr>
+      <td>{{ r.Restaurant_ID }}</td>
+      <td>{{ r.Name }}</td>
+      <td>{{ r.Location }}</td>
+      <td>{{ r.Contact_Number }}</td>
+      <td>{{ r.Opening_Hours }}</td>
+      <td>{{ r.Rating or "-" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

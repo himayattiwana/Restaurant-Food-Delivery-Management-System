@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">Orders</h2>
+
+<form method="post" class="row g-2 mb-4">
+  <div class="col-md-4">
+    <select class="form-select" name="customer_id" required>
+      <option value="">Select Customer</option>
+      {% for c in customers %}
+        <option value="{{ c.Customer_ID }}">{{ c.Name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4">
+    <select class="form-select" name="restaurant_id" required>
+      <option value="">Select Restaurant</option>
+      {% for r in restaurants %}
+        <option value="{{ r.Restaurant_ID }}">{{ r.Name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <select class="form-select" name="payment_method">
+      <option>Cash</option>
+      <option>Card</option>
+      <option>UPI</option>
+    </select>
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-primary w-100">Create Order</button>
+  </div>
+</form>
+
+<table class="table table-striped">
+  <thead><tr><th>#</th><th>Date</th><th>Customer</th><th>Restaurant</th><th>Status</th><th>Total</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>#{{ o.Order_ID }}</td>
+        <td>{{ o.Order_Date }}</td>
+        <td>{{ o.customer or '-' }}</td>
+        <td>{{ o.restaurant or '-' }}</td>
+        <td>{{ o.Order_Status }}</td>
+        <td>₹{{ '%.2f'|format(o.Total_Amount or 0) }}</td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('order_details', order_id=o.Order_ID) }}">Add Items</a></td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">Coupons</h2>
+
+<form method="post" class="row g-2 mb-4">
+  <div class="col-md-3"><input class="form-control" name="code" placeholder="Code" required></div>
+  <div class="col-md-2"><input class="form-control" name="discount" placeholder="Discount %" type="number" step="0.01"></div>
+  <div class="col-md-3"><input class="form-control" name="valid_until" placeholder="Valid Until (YYYY-MM-DD)"></div>
+  <div class="col-md-3">
+    <select class="form-select" name="restaurant_id">
+      <option value="">(Any restaurant)</option>
+      {% for r in restaurants %}<option value="{{ r.Restaurant_ID }}">{{ r.Name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-1"><button class="btn btn-primary w-100">Add</button></div>
+</form>
+
+<table class="table table-striped">
+  <thead><tr><th>#</th><th>Code</th><th>Discount %</th><th>Valid Until</th><th>Restaurant</th></tr></thead>
+  <tbody>
+    {% for c in coupons %}
+      <tr>
+        <td>{{ c.Coupon_ID }}</td>
+        <td>{{ c.Code }}</td>
+        <td>{{ c.Discount_Percentage }}</td>
+        <td>{{ c.Valid_Until or '-' }}</td>
+        <td>{{ c.Restaurant or '-' }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
