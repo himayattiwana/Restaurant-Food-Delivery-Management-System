@@ -359,5 +359,31 @@ def delete_coupon(coupon_id):
     flash("Coupon deleted", "success")
     return redirect(url_for("coupons"))
 
+# ---- POST shims so forms that submit to the list URLs still work ----
+@app.route("/restaurants", methods=["POST"])
+def restaurants_post():
+    return add_restaurant()
+
+@app.route("/food_items", methods=["POST"])
+def food_items_post():
+    return add_food_item()
+
+@app.route("/customers", methods=["POST"])
+def customers_post():
+    return add_customer()
+
+@app.route("/orders", methods=["POST"])
+def orders_post():
+    return add_order()
+
+@app.route("/deliveries", methods=["POST"])
+def deliveries_post():
+    return add_delivery()
+
+@app.route("/coupons", methods=["POST"])
+def coupons_post():
+    return add_coupon()
+
+
 if __name__ == "__main__":
     app.run(debug=True)
