@@ -432,5 +432,135 @@ def health_db():
     except Exception as e:
         return {"db_ok": False, "error": str(e)}, 500
 
+
+@app.route("/admin/init-db-inline")
+def init_db_inline():
+    from db import get_conn
+    schema = """
+    CREATE TABLE IF NOT EXISTS RESTAURANT (
+      Restaurant_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Name VARCHAR(100),
+      Location VARCHAR(255),
+      Owner_ID INT,
+      Contact_Number VARCHAR(15),
+      Opening_Hours VARCHAR(100),
+      Rating DECIMAL(3,2)
+    );
+    CREATE TABLE IF NOT EXISTS CUSTOMER (
+      Customer_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Name VARCHAR(100),
+      Email VARCHAR(100),
+      Password VARCHAR(255),
+      Phone_Number VARCHAR(15),
+      Address TEXT,
+      User_Type VARCHAR(50)
+    );
+    CREATE TABLE IF NOT EXISTS FOOD_ITEM (
+      Food_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Name VARCHAR(100),
+      Description TEXT,
+      Price DECIMAL(10,2),
+      Category VARCHAR(50),
+      Availability ENUM('Y','N') DEFAULT 'Y',
+      Restaurant_ID INT,
+      CONSTRAINT FK_Food_Rest FOREIGN KEY (Restaurant_ID)
+        REFERENCES RESTAURANT(Restaurant_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS COUPON (
+      Coupon_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Code VARCHAR(50),
+      Discount_Percentage DECIMAL(5,2),
+      Valid_Until DATE,
+      Restaurant_ID INT,
+      CONSTRAINT FK_Coupon_Rest FOREIGN KEY (Restaurant_ID)
+        REFERENCES RESTAURANT(Restaurant_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS ORDERS (
+      Order_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Customer_ID INT,
+      Restaurant_ID INT,
+      Payment_Method VARCHAR(50),
+      Order_Date DATE,
+      Total_Amount DECIMAL(10,2),
+      Order_Status VARCHAR(50),
+      CONSTRAINT FK_Order_Cust FOREIGN KEY (Customer_ID)
+        REFERENCES CUSTOMER(Customer_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+      CONSTRAINT FK_Order_Rest FOREIGN KEY (Restaurant_ID)
+        REFERENCES RESTAURANT(Restaurant_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS ORDER_DETAIL (
+      Order_Detail_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Order_ID INT,
+      Food_ID INT,
+      Quantity INT,
+      Price DECIMAL(10,2),
+      CONSTRAINT FK_OD_Order FOREIGN KEY (Order_ID)
+        REFERENCES ORDERS(Order_ID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+      CONSTRAINT FK_OD_Food FOREIGN KEY (Food_ID)
+        REFERENCES FOOD_ITEM(Food_ID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+    );
+    CREATE TABLE IF NOT EXISTS PAYMENT_STATUS (
+      Payment_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Payment_Status VARCHAR(50),
+      Payment_Method VARCHAR(50),
+      Order_ID INT,
+      CONSTRAINT FK_Pay_Order FOREIGN KEY (Order_ID)
+        REFERENCES ORDERS(Order_ID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS DELIVERY_AGENT (
+      Agent_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Name VARCHAR(100),
+      Phone_Number VARCHAR(15),
+      Vehicle_Number VARCHAR(50),
+      Availability_Status ENUM('Y','N') DEFAULT 'Y'
+    );
+    CREATE TABLE IF NOT EXISTS DELIVERY (
+      Delivery_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Order_ID INT,
+      Agent_ID INT,
+      Pickup_Time DATETIME,
+      Delivery_Time DATETIME,
+      Delivery_Status VARCHAR(50),
+      CONSTRAINT FK_Deliv_Order FOREIGN KEY (Order_ID)
+        REFERENCES ORDERS(Order_ID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+      CONSTRAINT FK_Deliv_Agent FOREIGN KEY (Agent_ID)
+        REFERENCES DELIVERY_AGENT(Agent_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS REVIEW (
+      Review_ID INT PRIMARY KEY AUTO_INCREMENT,
+      Customer_ID INT,
+      Restaurant_ID INT,
+      Review_Date DATE,
+      Rating INT,
+      Comment1 TEXT,
+      CONSTRAINT FK_Rev_Cust FOREIGN KEY (Customer_ID)
+        REFERENCES CUSTOMER(Customer_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+      CONSTRAINT FK_Rev_Rest FOREIGN KEY (Restaurant_ID)
+        REFERENCES RESTAURANT(Restaurant_ID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+    );
+    """
+    stmts = [s.strip() for s in schema.split(";") if s.strip()]
+    ran = 0
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for s in stmts:
+                    cur.execute(s)
+                    ran += 1
+        return {"ok": True, "ran": ran}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
+
 if __name__ == "__main__":
     app.run(debug=True)
