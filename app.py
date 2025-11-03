@@ -374,17 +374,7 @@ def deliveries():
             rows = cur.fetchall()
     return render_template("deliveries.html", deliveries=rows, orders=orders, agents=agents)
 
-# app.py (add anywhere once)
-@app.route("/health/db")
-def health_db():
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SHOW TABLES;")
-                tables = [t for t in cur.fetchall()]
-        return {"ok": True, "tables": tables}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}, 500
+
 
 @app.route("/admin/init-db")
 def init_db():
@@ -408,29 +398,6 @@ def init_db():
                 cur.execute(s)
                 created += 1
     return f"Ran {created} statements. Remove this route now."
-
-@app.route("/health/env")
-def health_env():
-    import os, pathlib
-    root = pathlib.Path(__file__).resolve().parent
-    return {
-        "has_DATABASE_URL": bool(os.getenv("DATABASE_URL")),
-        "DATABASE_URL_prefix": (os.getenv("DATABASE_URL") or "")[:20],
-        "cwd": str(root),
-        "schema_exists": (root / "schema.sql").exists()
-    }
-
-@app.route("/health/db")
-def health_db():
-    from db import get_conn
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 AS ok;")
-                row = cur.fetchone()
-        return {"db_ok": True, "row": row}
-    except Exception as e:
-        return {"db_ok": False, "error": str(e)}, 500
 
 
 @app.route("/admin/init-db-inline")
