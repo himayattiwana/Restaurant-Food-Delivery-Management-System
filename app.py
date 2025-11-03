@@ -28,29 +28,45 @@ def _ensure_schema_once():
                         ensure_schema(conn)
                     _schema_ready = True
                 except Exception:
-                    # Don't block requests if schema init fails; real errors will surface in routes
+                    # don't block requests if schema init fails
                     pass
+
+# -------- Helpers --------
+def _data():
+    """Return data from HTML form or JSON, never raising BadRequest."""
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form
+
+def _parse_date(value, fmt="%Y-%m-%d"):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, fmt)
+    except Exception:
+        return None
 
 # ---------- Home (Dashboard) ----------
 @app.route("/")
 def home():
     stats = {}
+    latest_orders = []
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) AS c FROM RESTAURANT")
-            stats["restaurants"] = cur.fetchone()["c"]
+            row = cur.fetchone(); stats["restaurants"] = (row["c"] if isinstance(row, dict) else row[0]) if row else 0
 
             cur.execute("SELECT COUNT(*) AS c FROM CUSTOMER")
-            stats["customers"] = cur.fetchone()["c"]
+            row = cur.fetchone(); stats["customers"] = (row["c"] if isinstance(row, dict) else row[0]) if row else 0
 
             cur.execute("SELECT COUNT(*) AS c FROM FOOD_ITEM")
-            stats["food_items"] = cur.fetchone()["c"]
+            row = cur.fetchone(); stats["food_items"] = (row["c"] if isinstance(row, dict) else row[0]) if row else 0
 
             cur.execute("SELECT COUNT(*) AS c FROM ORDERS")
-            stats["orders"] = cur.fetchone()["c"]
+            row = cur.fetchone(); stats["orders"] = (row["c"] if isinstance(row, dict) else row[0]) if row else 0
 
             cur.execute("SELECT COUNT(*) AS c FROM DELIVERY_AGENT")
-            stats["agents"] = cur.fetchone()["c"]
+            row = cur.fetchone(); stats["agents"] = (row["c"] if isinstance(row, dict) else row[0]) if row else 0
 
             cur.execute("""
                 SELECT o.Order_ID, c.Name AS customer, r.Name AS restaurant, o.Order_Date, o.Total_Amount
@@ -72,15 +88,21 @@ def restaurants():
             rows = cur.fetchall()
     return render_template("restaurants.html", rows=rows)
 
+# POST shim so templates that post to /restaurants still work
+@app.route("/restaurants", methods=["POST"])
+def restaurants_post():
+    return add_restaurant()
+
 @app.route("/restaurants/add", methods=["POST"])
 def add_restaurant():
-    name = request.form["name"].strip()
-    address = request.form["address"].strip()
-    phone = request.form["phone"].strip()
-    opening_hours = request.form["opening_hours"].strip()
+    data = _data()
+    name = (data.get("name") or data.get("restaurant_name") or "").strip()
+    address = (data.get("address") or data.get("restaurant_address") or "").strip()
+    phone = (data.get("phone") or data.get("restaurant_phone") or "").strip()
+    opening_hours = (data.get("opening_hours") or data.get("hours") or "").strip()
 
     if not name:
-        flash("Name is required", "error")
+        flash("Restaurant name is required", "error")
         return redirect(url_for("restaurants"))
 
     with get_conn() as conn:
@@ -109,15 +131,20 @@ def customers():
             rows = cur.fetchall()
     return render_template("customers.html", rows=rows)
 
+@app.route("/customers", methods=["POST"])
+def customers_post():
+    return add_customer()
+
 @app.route("/customers/add", methods=["POST"])
 def add_customer():
-    name = request.form["name"].strip()
-    email = request.form["email"].strip()
-    phone = request.form["phone"].strip()
-    address = request.form["address"].strip()
+    data = _data()
+    name = (data.get("name") or data.get("customer_name") or "").strip()
+    email = (data.get("email") or data.get("customer_email") or "").strip()
+    phone = (data.get("phone") or data.get("customer_phone") or "").strip()
+    address = (data.get("address") or data.get("customer_address") or "").strip()
 
     if not name:
-        flash("Name is required", "error")
+        flash("Customer name is required", "error")
         return redirect(url_for("customers"))
 
     with get_conn() as conn:
@@ -151,11 +178,16 @@ def food_items():
             rows = cur.fetchall()
     return render_template("food_items.html", rows=rows)
 
+@app.route("/food_items", methods=["POST"])
+def food_items_post():
+    return add_food_item()
+
 @app.route("/food_items/add", methods=["POST"])
 def add_food_item():
-    name = request.form["name"].strip()
-    price = request.form["price"].strip()
-    restaurant_id = request.form["restaurant_id"].strip()
+    data = _data()
+    name = (data.get("name") or data.get("item_name") or "").strip()
+    price = (data.get("price") or data.get("item_price") or "").strip()
+    restaurant_id = (data.get("restaurant_id") or data.get("rest_id") or "").strip()
 
     if not name or not price or not restaurant_id:
         flash("Name, Price and Restaurant are required", "error")
@@ -194,13 +226,22 @@ def orders():
             rows = cur.fetchall()
     return render_template("orders.html", rows=rows)
 
+@app.route("/orders", methods=["POST"])
+def orders_post():
+    return add_order()
+
 @app.route("/orders/add", methods=["POST"])
 def add_order():
-    customer_id = request.form["customer_id"]
-    restaurant_id = request.form["restaurant_id"]
-    order_date = datetime.strptime(request.form["order_date"], "%Y-%m-%d")
-    total_amount = request.form["total_amount"]
-    agent_id = request.form.get("agent_id") or None
+    data = _data()
+    customer_id = data.get("customer_id") or data.get("cust_id")
+    restaurant_id = data.get("restaurant_id") or data.get("rest_id")
+    order_date = _parse_date(data.get("order_date")) or datetime.utcnow()
+    total_amount = data.get("total_amount") or data.get("amount") or 0
+    agent_id = data.get("agent_id") or None
+
+    if not customer_id or not restaurant_id:
+        flash("Customer and Restaurant are required", "error")
+        return redirect(url_for("orders"))
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -235,8 +276,13 @@ def order_details(order_id):
 
 @app.route("/order_details/add/<int:order_id>", methods=["POST"])
 def add_order_detail(order_id):
-    item_id = request.form["item_id"]
-    quantity = request.form["quantity"]
+    data = _data()
+    item_id = data.get("item_id")
+    quantity = data.get("quantity") or 1
+
+    if not item_id:
+        flash("Item is required", "error")
+        return redirect(url_for("order_details", order_id=order_id))
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -264,12 +310,18 @@ def delivery_agents():
             rows = cur.fetchall()
     return render_template("delivery_agents.html", rows=rows)
 
+@app.route("/delivery_agents", methods=["POST"])
+def delivery_agents_post():
+    return add_delivery_agent()
+
 @app.route("/delivery_agents/add", methods=["POST"])
 def add_delivery_agent():
-    name = request.form["name"].strip()
-    phone = request.form["phone"].strip()
+    data = _data()
+    name = (data.get("name") or data.get("agent_name") or "").strip()
+    phone = (data.get("phone") or data.get("agent_phone") or "").strip()
+
     if not name:
-        flash("Name is required", "error")
+        flash("Agent name is required", "error")
         return redirect(url_for("delivery_agents"))
 
     with get_conn() as conn:
@@ -301,12 +353,21 @@ def deliveries():
             rows = cur.fetchall()
     return render_template("deliveries.html", rows=rows)
 
+@app.route("/deliveries", methods=["POST"])
+def deliveries_post():
+    return add_delivery()
+
 @app.route("/deliveries/add", methods=["POST"])
 def add_delivery():
-    order_id = request.form["order_id"]
-    agent_id = request.form["agent_id"]
-    delivery_date = datetime.strptime(request.form["delivery_date"], "%Y-%m-%d")
-    status = request.form["status"].strip()
+    data = _data()
+    order_id = data.get("order_id")
+    agent_id = data.get("agent_id")
+    delivery_date = _parse_date(data.get("delivery_date")) or datetime.utcnow()
+    status = (data.get("status") or "").strip()
+
+    if not order_id or not agent_id:
+        flash("Order and Agent are required", "error")
+        return redirect(url_for("deliveries"))
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -334,11 +395,16 @@ def coupons():
             rows = cur.fetchall()
     return render_template("coupons.html", rows=rows)
 
+@app.route("/coupons", methods=["POST"])
+def coupons_post():
+    return add_coupon()
+
 @app.route("/coupons/add", methods=["POST"])
 def add_coupon():
-    code = request.form["code"].strip()
-    discount = request.form["discount"].strip()
-    expiry_date = request.form["expiry_date"].strip() or None
+    data = _data()
+    code = (data.get("code") or "").strip()
+    discount = (data.get("discount") or data.get("amount") or "").strip()
+    expiry_date = (data.get("expiry_date") or data.get("expires") or "").strip() or None
 
     if not code or not discount:
         flash("Code and Discount are required", "error")
@@ -350,40 +416,6 @@ def add_coupon():
                         (code, discount, expiry_date))
     flash("Coupon added", "success")
     return redirect(url_for("coupons"))
-
-@app.route("/coupons/delete/<int:coupon_id>")
-def delete_coupon(coupon_id):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM COUPON WHERE Coupon_ID = %s", (coupon_id,))
-    flash("Coupon deleted", "success")
-    return redirect(url_for("coupons"))
-
-# ---- POST shims so forms that submit to the list URLs still work ----
-@app.route("/restaurants", methods=["POST"])
-def restaurants_post():
-    return add_restaurant()
-
-@app.route("/food_items", methods=["POST"])
-def food_items_post():
-    return add_food_item()
-
-@app.route("/customers", methods=["POST"])
-def customers_post():
-    return add_customer()
-
-@app.route("/orders", methods=["POST"])
-def orders_post():
-    return add_order()
-
-@app.route("/deliveries", methods=["POST"])
-def deliveries_post():
-    return add_delivery()
-
-@app.route("/coupons", methods=["POST"])
-def coupons_post():
-    return add_coupon()
-
 
 if __name__ == "__main__":
     app.run(debug=True)
